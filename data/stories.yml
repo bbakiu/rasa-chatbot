@@ -35,3 +35,8 @@ stories:
   - action: utter_greet
   - intent: mood_great
   - action: utter_happy
+
+- story: translate text
+  steps:
+    - intent: translate
+    - action: utter_translate

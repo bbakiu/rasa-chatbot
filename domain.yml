@@ -10,6 +10,7 @@ intents:
 - deny
 - mood_unhappy
 - bot_challenge
+- translate
 responses:
   utter_greet:
   - text: Hey! How are you?
@@ -24,6 +25,9 @@ responses:
   - text: Bye
   utter_iamabot:
   - text: I am a bot, powered by Rasa.
+  utter_translate:
+    - text: I am a bot, translating for you.
 actions:
 - utter_greet
 - utter_happy
+- action_translate
