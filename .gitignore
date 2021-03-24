@@ -3,3 +3,4 @@ venv/*
 myenv/*
 .idea
 models/
+.DS_Store
