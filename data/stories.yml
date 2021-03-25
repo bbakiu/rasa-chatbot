@@ -37,5 +37,16 @@ stories:
 
 - story: translate text
   steps:
-    - intent: translate
+    - intent: translate [sentence](source)
     - action: action_translate
+
+- story: name path
+  steps:
+    - intent: greet
+    - action: utter_greet
+    - intent: tell_name
+    - action: utter_ask_name
+    - intent: give_name
+    - action: action_receive_name
+    - intent: repeat_name
+    - action: action_say_name

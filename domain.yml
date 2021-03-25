@@ -3,14 +3,32 @@ session_config:
   session_expiration_time: 60
   carry_over_slots_to_new_session: true
 intents:
-- greet
-- mood_great
-- goodbye
-- affirm
-- deny
-- mood_unhappy
-- bot_challenge
-- translate
+- goodbye:
+    use_entities: true
+- greet:
+    use_entities: true
+- tell_name:
+    use_entities: true
+- repeat_name:
+    use_entities: true
+- give_name:
+    use_entities: true
+- affirm:
+    use_entities: true
+- deny:
+    use_entities: true
+- mood_great:
+    use_entities: true
+- mood_unhappy:
+    use_entities: true
+- bot_challenge:
+    use_entities: true
+- translate:
+    use_entities: true
+entities: []
+slots:
+  name:
+    type: text
 responses:
   utter_greet:
   - text: Hey! How are you?
@@ -27,7 +45,14 @@ responses:
   - text: I am a bot, powered by Rasa.
   utter_translate:
     - text: I am a bot, translating for you.
+  utter_ask_name:
+    - text: What is your name?
 actions:
 - utter_greet
 - utter_happy
 - action_translate
+- action_receive_name
+- action_say_name
+- utter_ask_name
+forms: {}
+e2e_actions: []
