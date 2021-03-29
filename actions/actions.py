@@ -6,10 +6,9 @@
 
 from typing import Any, Text, Dict, List
 
-from rasa_sdk.events import SlotSet
+from rasa_sdk.events import SlotSet, EventType
 from rasa_sdk import Action, Tracker
 from rasa_sdk.executor import CollectingDispatcher
-
 
 class ActionTranslate(Action):
 
@@ -54,4 +53,15 @@ class ActionSayName(Action):
             dispatcher.utter_message(text="I don't know your name.")
         else:
             dispatcher.utter_message(text=f"Your name is {name}!")
+        return []
+
+class AskForSlotAction(Action):
+    def name(self) -> Text:
+        return "action_ask_last_name"
+
+    def run(
+            self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict
+    ) -> List[EventType]:
+        first_name = tracker.get_slot("first_name")
+        dispatcher.utter_message(text=f"So {first_name}, what is your last name?")
         return []
