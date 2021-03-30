@@ -3,65 +3,46 @@
 #
 # See this guide on how to implement these action:
 # https://rasa.com/docs/rasa/custom-actions
+from typing import Text, List, Any, Dict
 
-from typing import Any, Text, Dict, List
-
-from rasa_sdk.events import SlotSet, EventType
-from rasa_sdk import Action, Tracker
+from rasa_sdk import Tracker, FormValidationAction
 from rasa_sdk.executor import CollectingDispatcher
+from rasa_sdk.types import DomainDict
 
-class ActionTranslate(Action):
-
+class ValidateNameForm(FormValidationAction):
     def name(self) -> Text:
-        return "action_translate"
+        return "validate_name_form"
 
-    def run(self, dispatcher: CollectingDispatcher,
+    def validate_first_name(
+            self,
+            slot_value: Any,
+            dispatcher: CollectingDispatcher,
             tracker: Tracker,
-            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+            domain: DomainDict,
+    ) -> Dict[Text, Any]:
+        """Validate `first_name` value."""
 
-        print(domain)
-        dispatcher.utter_message(text="This is a translation! It could be an api call")
-
-        return []
-
-
-class ActionReceiveName(Action):
-
-    def name(self) -> Text:
-        return "action_receive_name"
-
-    def run(self, dispatcher: CollectingDispatcher,
-            tracker: Tracker,
-            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-
-        text = tracker.latest_message['text']
-        dispatcher.utter_message(text=f"I'll remember your name {text}!")
-        return [SlotSet("name", text)]
-
-
-class ActionSayName(Action):
-
-    def name(self) -> Text:
-        return "action_say_name"
-
-    def run(self, dispatcher: CollectingDispatcher,
-            tracker: Tracker,
-            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-
-        name = tracker.get_slot("name")
-        if not name:
-            dispatcher.utter_message(text="I don't know your name.")
+        # If the name is super short, it might be wrong.
+        print(f"First name given = {slot_value} length = {len(slot_value)}")
+        if len(slot_value) <= 2:
+            dispatcher.utter_message(text=f"That's a very short name. I'm assuming you mis-spelled.")
+            return {"first_name": None}
         else:
-            dispatcher.utter_message(text=f"Your name is {name}!")
-        return []
+            return {"first_name": slot_value}
 
-class AskForSlotAction(Action):
-    def name(self) -> Text:
-        return "action_ask_last_name"
+    def validate_last_name(
+            self,
+            slot_value: Any,
+            dispatcher: CollectingDispatcher,
+            tracker: Tracker,
+            domain: DomainDict,
+    ) -> Dict[Text, Any]:
+        """Validate `last_name` value."""
 
-    def run(
-            self, dispatcher: CollectingDispatcher, tracker: Tracker, domain: Dict
-    ) -> List[EventType]:
-        first_name = tracker.get_slot("first_name")
-        dispatcher.utter_message(text=f"So {first_name}, what is your last name?")
-        return []
+        # If the name is super short, it might be wrong.
+        print(f"Last name given = {slot_value} length = {len(slot_value)}")
+        if len(slot_value) <= 2:
+            dispatcher.utter_message(text=f"That's a very short name. I'm assuming you mis-spelled.")
+            return {"last_name": None}
+        else:
+            return {"last_name": slot_value}
