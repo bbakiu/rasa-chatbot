@@ -55,3 +55,28 @@ stories:
     - active_loop: null
     - action: utter_submit
     - action: utter_slots_values
+
+- story: store translate in form
+  steps:
+    - intent: greet
+    - action: utter_greet
+    - intent: request_translate
+    - action: translate_form
+    - active_loop: translate_form
+    - slot_was_set:
+        - requested_slot: translate_text
+    - slot_was_set:
+        - translate_text: vincent
+    - slot_was_set:
+        - requested_slot: null
+    - active_loop: null
+    - action: utter_submit
+    - action: utter_slots_values_translate
+
+- story: get translate from form
+  steps:
+    - intent: greet
+    - action: utter_greet
+    - intent: return_translate
+    - action: action_say_translate
+    - action: utter_submit

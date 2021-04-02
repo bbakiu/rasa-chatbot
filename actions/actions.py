@@ -4,8 +4,8 @@
 # See this guide on how to implement these action:
 # https://rasa.com/docs/rasa/custom-actions
 from typing import Text, List, Any, Dict
-
-from rasa_sdk import Tracker, FormValidationAction
+from rasa_sdk.events import SlotSet
+from rasa_sdk import Tracker, FormValidationAction, Action
 from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.types import DomainDict
 
@@ -46,3 +46,32 @@ class ValidateNameForm(FormValidationAction):
             return {"last_name": None}
         else:
             return {"last_name": slot_value}
+
+class ActionReceiveTranslate(Action):
+
+    def name(self) -> Text:
+        return "action_receive_translate"
+
+    def run(self, dispatcher: CollectingDispatcher,
+            tracker: Tracker,
+            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+
+        text = tracker.latest_message['text']
+        dispatcher.utter_message(text=f"I'll save the text you want to translate: {text}!")
+        return [SlotSet("translate_text", text)]
+
+class ActionSayTranslate(Action):
+
+    def name(self) -> Text:
+        return "action_say_translate"
+
+    def run(self, dispatcher: CollectingDispatcher,
+            tracker: Tracker,
+            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
+
+        translate = tracker.get_slot("translate_text")
+        if not translate:
+            dispatcher.utter_message(text="I don't know what you want to translate.")
+        else:
+            dispatcher.utter_message(text=f"Your translate is {translate}!")
+        return []

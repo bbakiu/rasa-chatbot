@@ -85,17 +85,22 @@ nlu:
     - are you a human?
     - am I talking to a bot?
     - am I talking to a human?
-- intent: translate
-  examples: |
-    - translate
-    - translate this for me
-    - please translate
 - intent: request_names
   examples: |
     - i want to give you my name
     - give name
     - you need to know my name
     - do you know my name?
+- intent: request_translate
+  examples: |
+    - translate
+    - translate for me please
+    - can you translate
+    - translate?
+- intent: return_translate
+  examples: |
+    - give translate
+    - give translate for me
 
 #- intent: tell_name
 #  examples: |
