@@ -12,6 +12,7 @@ intents:
 - mood_unhappy
 - bot_challenge
 - request_translate
+- return_translate
 entities: []
 forms:
   name_form:

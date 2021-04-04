@@ -8,7 +8,8 @@ from rasa_sdk.events import SlotSet
 from rasa_sdk import Tracker, FormValidationAction, Action
 from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.types import DomainDict
-
+import requests
+import json
 class ValidateNameForm(FormValidationAction):
     def name(self) -> Text:
         return "validate_name_form"
@@ -70,8 +71,12 @@ class ActionSayTranslate(Action):
             domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
         translate = tracker.get_slot("translate_text")
-        if not translate:
+        chuck_norris_url = "https://api.chucknorris.io/jokes/random"
+        response_json = requests.get(chuck_norris_url)
+
+        fact = json.loads(response_json.text)["value"]
+        if not fact:
             dispatcher.utter_message(text="I don't know what you want to translate.")
         else:
-            dispatcher.utter_message(text=f"Your translate is {translate}!")
+            dispatcher.utter_message(text=f"Chuck fact: {fact}!")
         return []
