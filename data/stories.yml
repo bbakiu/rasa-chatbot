@@ -79,4 +79,4 @@ stories:
     - action: utter_greet
     - intent: return_translate
     - action: action_say_translate
-    - action: utter_submit
+    - action: utter_welcome

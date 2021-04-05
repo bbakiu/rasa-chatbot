@@ -23,12 +23,20 @@ forms:
   translate_form:
     translate_text:
       - type: from_text
+    language_source:
+      - type: from_text
+    language_target:
+      - type: from_text
 slots:
   first_name:
     type: text
   last_name:
     type: text
   translate_text:
+    type: text
+  language_source:
+    type: text
+  language_target:
     type: text
 responses:
   utter_greet:
@@ -53,7 +61,15 @@ responses:
   utter_slots_values:
   - text: I will remember that your name is {first_name} {last_name}!
   utter_slots_values_translate:
-  - text: I will remember to translate {translate_text}!
+  - text: "You asked me to translate: {translate_text}!"
+  utter_welcome:
+    - text: You're welcome!
+  utter_ask_translate_text:
+    - text: What do you want me to translate for you?
+  utter_ask_language_source:
+    - text: What language is that?
+  utter_ask_language_target:
+    - text: What language do you want to translate that?
 
 actions:
 - utter_greet
