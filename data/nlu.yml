@@ -101,3 +101,13 @@ nlu:
   examples: |
     - give translate
     - give translate for me
+- lookup: language
+  examples: |
+    - albian
+    - french
+    - spanish
+    - english
+    - german
+    - polish
+    - greek
+    - portuguese

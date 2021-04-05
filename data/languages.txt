@@ -1,0 +1,11 @@
+english
+german
+french
+albanian
+spanish
+greek
+japanese
+polish
+portuguese
+serbian
+hungarian

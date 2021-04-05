@@ -10,6 +10,9 @@ from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.types import DomainDict
 import requests
 import json
+import pathlib
+
+languages = pathlib.Path("data/languages.txt").read_text().split("\n")
 
 class ValidateNameForm(FormValidationAction):
     def name(self) -> Text:
@@ -64,8 +67,9 @@ class ValidateTranslateForm(FormValidationAction):
 
         # If the name is super short, it might be wrong.
         print(f"language_source given = {slot_value} length = {len(slot_value)}")
-        if len(slot_value) <= 2:
-            dispatcher.utter_message(text=f"That's a very language name. I'm assuming you mis-spelled.")
+        language = slot_value
+        if language not in languages:
+            dispatcher.utter_message(text=f"That's a language I don't understand. Check if you mis-spelled it.")
             return {"language_source": None}
         else:
             return {"language_source": slot_value}
@@ -81,8 +85,9 @@ class ValidateTranslateForm(FormValidationAction):
 
         # If the name is super short, it might be wrong.
         print(f"language_target given = {slot_value} length = {len(slot_value)}")
-        if len(slot_value) <= 2:
-            dispatcher.utter_message(text=f"That's a very language name. I'm assuming you mis-spelled.")
+        language = slot_value
+        if language not in languages:
+            dispatcher.utter_message(text=f"That's a language I don't understand. Check if you mis-spelled it.")
             return {"language_target": None}
         else:
             return {"language_target": slot_value}
