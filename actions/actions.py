@@ -10,6 +10,7 @@ from rasa_sdk.executor import CollectingDispatcher
 from rasa_sdk.types import DomainDict
 import requests
 import json
+
 class ValidateNameForm(FormValidationAction):
     def name(self) -> Text:
         return "validate_name_form"
@@ -47,6 +48,44 @@ class ValidateNameForm(FormValidationAction):
             return {"last_name": None}
         else:
             return {"last_name": slot_value}
+
+class ValidateTranslateForm(FormValidationAction):
+    def name(self) -> Text:
+        return "validate_translate_form"
+
+    def validate_language_source(
+            self,
+            slot_value: Any,
+            dispatcher: CollectingDispatcher,
+            tracker: Tracker,
+            domain: DomainDict,
+    ) -> Dict[Text, Any]:
+        """Validate `language_source` value."""
+
+        # If the name is super short, it might be wrong.
+        print(f"language_source given = {slot_value} length = {len(slot_value)}")
+        if len(slot_value) <= 2:
+            dispatcher.utter_message(text=f"That's a very language name. I'm assuming you mis-spelled.")
+            return {"language_source": None}
+        else:
+            return {"language_source": slot_value}
+
+    def validate_language_target(
+            self,
+            slot_value: Any,
+            dispatcher: CollectingDispatcher,
+            tracker: Tracker,
+            domain: DomainDict,
+    ) -> Dict[Text, Any]:
+        """Validate `language_target` value."""
+
+        # If the name is super short, it might be wrong.
+        print(f"language_target given = {slot_value} length = {len(slot_value)}")
+        if len(slot_value) <= 2:
+            dispatcher.utter_message(text=f"That's a very language name. I'm assuming you mis-spelled.")
+            return {"language_target": None}
+        else:
+            return {"language_target": slot_value}
 
 class ActionSayTranslate(Action):
 
