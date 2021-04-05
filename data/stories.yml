@@ -66,11 +66,18 @@ stories:
     - slot_was_set:
         - requested_slot: translate_text
     - slot_was_set:
-        - translate_text: vincent
+        - translate_text: This could be your text
+    - slot_was_set:
+        - requested_slot: language_source
+    - slot_was_set:
+        - language_source: english
+    - slot_was_set:
+        - requested_slot: language_target
+    - slot_was_set:
+        - language_target: german
     - slot_was_set:
         - requested_slot: null
     - active_loop: null
-    - action: utter_submit
     - action: utter_slots_values_translate
 
 - story: get translate from form

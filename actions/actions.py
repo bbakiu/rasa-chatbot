@@ -48,19 +48,6 @@ class ValidateNameForm(FormValidationAction):
         else:
             return {"last_name": slot_value}
 
-class ActionReceiveTranslate(Action):
-
-    def name(self) -> Text:
-        return "action_receive_translate"
-
-    def run(self, dispatcher: CollectingDispatcher,
-            tracker: Tracker,
-            domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
-
-        text = tracker.latest_message['text']
-        dispatcher.utter_message(text=f"I'll save the text you want to translate: {text}!")
-        return [SlotSet("translate_text", text)]
-
 class ActionSayTranslate(Action):
 
     def name(self) -> Text:
@@ -70,7 +57,9 @@ class ActionSayTranslate(Action):
             tracker: Tracker,
             domain: Dict[Text, Any]) -> List[Dict[Text, Any]]:
 
-        translate = tracker.get_slot("translate_text")
+        translate_text = tracker.get_slot("translate_text")
+        language_source = tracker.get_slot("language_source")
+        language_target = tracker.get_slot("language_target")
         chuck_norris_url = "https://api.chucknorris.io/jokes/random"
         response_json = requests.get(chuck_norris_url)
 
@@ -79,4 +68,5 @@ class ActionSayTranslate(Action):
             dispatcher.utter_message(text="I don't know what you want to translate.")
         else:
             dispatcher.utter_message(text=f"Chuck fact: {fact}!")
+            dispatcher.utter_message(text=f"To translate from {language_source} to {language_target}: {translate_text}!")
         return []
