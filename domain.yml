@@ -76,5 +76,6 @@ actions:
 - utter_slots_values
 - utter_submit
 - validate_name_form
+- validate_translate_form
 - action_say_translate
 e2e_actions: []
