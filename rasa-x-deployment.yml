@@ -1,0 +1,2006 @@
+---
+# Source: rasa-x/charts/rabbitmq/templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: 0.0.1-rabbit
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.19.2
+    release: "0.0.1"
+    heritage: "Helm"
+---
+# Source: rasa-x/charts/postgresql/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: 0.0.1-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-8.6.13
+    release: "0.0.1"
+    heritage: "Helm"
+type: Opaque
+data:
+  postgresql-password: "cG9zdGdyZXNxbA=="
+---
+# Source: rasa-x/charts/rabbitmq/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: 0.0.1-rabbit
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.19.2
+    release: "0.0.1"
+    heritage: "Helm"
+type: Opaque
+data:
+  
+  rabbitmq-password: "cmFiYml0MTIzIQ=="
+  
+  
+  rabbitmq-erlang-cookie: "WU9HZDR3Q1c2bmNGN3BwMEQ2d0c1TXJjYUZ4dnE0bXE="
+---
+# Source: rasa-x/charts/redis/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: 0.0.1-redis
+  labels:
+    app: redis
+    chart: redis-10.5.14
+    release: "0.0.1"
+    heritage: "Helm"
+type: Opaque
+data:
+  redis-password: "cmVkaXM="
+---
+# Source: rasa-x/templates/rasa-secret.yaml
+# Only generate secret if no externalSecret was provided.
+
+
+apiVersion: "v1"
+kind: "Secret"
+metadata:
+  name: 0.0.1-rasa
+type: "Opaque"
+data:
+  rasaToken: "PHNhZmUgY3JlZGVudGlhbD4="
+  rasaXToken: "PHNhZmUgY3JlZGVudGlhbD4="
+  passwordSalt: "cGVwcGVy"
+  jwtSecret: "PHNhZmUgY3JlZGVudGlhbD4="
+  initialPassword: "YWRtaW4="
+---
+# Source: rasa-x/charts/rabbitmq/templates/configuration.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 0.0.1-rabbit-config
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.19.2
+    release: "0.0.1"
+    heritage: "Helm"
+data:
+  enabled_plugins: |-
+    [rabbitmq_management, rabbitmq_peer_discovery_k8s, rabbitmq_auth_backend_ldap].
+  rabbitmq.conf: |-
+    ##username and password
+    default_user=user
+    default_pass=CHANGEME
+    ## Clustering
+    cluster_formation.peer_discovery_backend  = rabbit_peer_discovery_k8s
+    cluster_formation.k8s.host = kubernetes.default.svc.cluster.local
+    cluster_formation.node_cleanup.interval = 10
+    cluster_formation.node_cleanup.only_log_warning = true
+    cluster_partition_handling = autoheal
+    # queue master locator
+    queue_master_locator=min-masters
+    # enable guest user
+    loopback_users.guest = false
+    #disk_free_limit.absolute = 50MB
+    #management.load_definitions = /app/load_definition.json
+---
+# Source: rasa-x/charts/rabbitmq/templates/healthchecks.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 0.0.1-rabbit-healthchecks
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.19.2
+    release: "0.0.1"
+    heritage: "Helm"
+data:
+  rabbitmq-health-check: |-
+    #!/bin/sh
+    START_FLAG=/opt/bitnami/rabbitmq/var/lib/rabbitmq/.start
+    if [ -f ${START_FLAG} ]; then
+        rabbitmqctl node_health_check
+        RESULT=$?
+        if [ $RESULT -ne 0 ]; then
+          rabbitmqctl status
+          exit $?
+        fi
+        rm -f ${START_FLAG}
+        exit ${RESULT}
+    fi
+    rabbitmq-api-check $1 $2
+  rabbitmq-api-check: |-
+    #!/bin/sh
+    set -e
+    URL=$1
+    EXPECTED=$2
+    ACTUAL=$(curl --silent --show-error --fail "${URL}")
+    echo "${ACTUAL}"
+    test "${EXPECTED}" = "${ACTUAL}"
+---
+# Source: rasa-x/charts/redis/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 0.0.1-redis
+  labels:
+    app: redis
+    chart: redis-10.5.14
+    heritage: Helm
+    release: 0.0.1
+data:
+  redis.conf: |-
+    # User-supplied configuration:
+    # Enable AOF https://redis.io/topics/persistence#append-only-file
+    appendonly yes
+    # Disable RDB persistence, AOF persistence already enabled.
+    save ""
+  master.conf: |-
+    dir /data
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+  replica.conf: |-
+    dir /data
+    slave-read-only yes
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+---
+# Source: rasa-x/charts/redis/templates/health-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: 0.0.1-redis-health
+  labels:
+    app: redis
+    chart: redis-10.5.14
+    heritage: Helm
+    release: 0.0.1
+data:
+  ping_readiness_local.sh: |-
+    #!/bin/bash
+    no_auth_warning=$([[ "$(redis-cli --version)" =~ (redis-cli 5.*) ]] && echo --no-auth-warning)
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_PASSWORD $no_auth_warning \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_local.sh: |-
+    #!/bin/bash
+    no_auth_warning=$([[ "$(redis-cli --version)" =~ (redis-cli 5.*) ]] && echo --no-auth-warning)
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_PASSWORD $no_auth_warning \
+        -h localhost \
+        -p $REDIS_PORT \
+        ping
+    )
+    if [ "$response" != "PONG" ] && [ "$response" != "LOADING Redis is loading the dataset in memory" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_master.sh: |-
+    #!/bin/bash
+    no_auth_warning=$([[ "$(redis-cli --version)" =~ (redis-cli 5.*) ]] && echo --no-auth-warning)
+     response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_MASTER_PASSWORD $no_auth_warning \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$response" != "PONG" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_liveness_master.sh: |-
+    #!/bin/bash
+    no_auth_warning=$([[ "$(redis-cli --version)" =~ (redis-cli 5.*) ]] && echo --no-auth-warning)
+    response=$(
+      timeout -s 9 $1 \
+      redis-cli \
+        -a $REDIS_MASTER_PASSWORD $no_auth_warning \
+        -h $REDIS_MASTER_HOST \
+        -p $REDIS_MASTER_PORT_NUMBER \
+        ping
+    )
+    if [ "$response" != "PONG" ] && [ "$response" != "LOADING Redis is loading the dataset in memory" ]; then
+      echo "$response"
+      exit 1
+    fi
+  ping_readiness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_readiness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_readiness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+  ping_liveness_local_and_master.sh: |-
+    script_dir="$(dirname "$0")"
+    exit_status=0
+    "$script_dir/ping_liveness_local.sh" $1 || exit_status=$?
+    "$script_dir/ping_liveness_master.sh" $1 || exit_status=$?
+    exit $exit_status
+---
+# Source: rasa-x/templates/nginx-configmap.yaml
+apiVersion: "v1"
+data:
+  agree: "openshift"
+kind: "ConfigMap"
+metadata:
+  name: "0.0.1-agreement"
+  labels:
+    
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+---
+# Source: rasa-x/templates/rasa-config-files-configmap.yaml
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "0.0.1-rasa-configuration-files"
+  labels:
+    
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  rasa-credentials: |
+    rasa:
+      url: http://0.0.1-rasa-x-rasa-x.rasa-chat-bot.svc:5002/api
+  rasa-endpoints: |
+    models:
+      url: ${RASA_MODEL_SERVER}
+      token: ${RASA_X_TOKEN}
+      wait_time_between_pulls: 10
+    tracker_store:
+      type: sql
+      dialect: "postgresql"
+      url: 0.0.1-postgresql
+      port: 5432
+      username: postgres
+      password: ${DB_PASSWORD}
+      db: ${DB_DATABASE}
+      login_db: rasa
+    event_broker:
+      type: "pika"
+      url: "0.0.1-rabbit"
+      username: "user"
+      password: ${RABBITMQ_PASSWORD}
+      port: 5672
+      queues:
+      - ${RABBITMQ_QUEUE}
+    action_endpoint:
+      url: "http://0.0.1-rasa-x-app.rasa-chat-bot.svc:5055/webhook"
+      token:  ""
+    lock_store:
+      type: "redis"
+      url: 0.0.1-redis-master
+      port: 6379
+      password: ${REDIS_PASSWORD}
+      db: 1
+    cache:
+      type: "redis"
+      url: 0.0.1-redis-master
+      port: 6379
+      password: ${REDIS_PASSWORD}
+      db: 2
+      key_prefix: "rasax_cache"
+---
+# Source: rasa-x/templates/rasa-x-config-files-configmap.yaml
+apiVersion: "v1"
+kind: "ConfigMap"
+metadata:
+  name: "0.0.1-rasa-x-configuration-files"
+  labels:
+    
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+data:
+  environments: |
+    rasa:
+      production:
+        url: "http://0.0.1-rasa-x-rasa-production.rasa-chat-bot.svc:5005"
+        token: ${RASA_TOKEN}
+      worker:
+        url: "http://0.0.1-rasa-x-rasa-worker.rasa-chat-bot.svc:5005"
+        token: ${RASA_TOKEN}
+---
+# Source: rasa-x/templates/rasa-x-volumeclaim.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: 0.0.1-rasa-x-claim
+  namespace: rasa-chat-bot
+  labels:
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+  finalizers:
+    - kubernetes.io/pvc-protection
+spec:
+  accessModes:
+    - "ReadWriteOnce"
+  resources:
+    requests:
+      storage: "10Gi"
+---
+# Source: rasa-x/charts/rabbitmq/templates/role.yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: 0.0.1-rabbit-endpoint-reader
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.19.2
+    release: "0.0.1"
+    heritage: "Helm"
+rules:
+- apiGroups: [""]
+  resources: ["endpoints"]
+  verbs: ["get"]
+---
+# Source: rasa-x/charts/rabbitmq/templates/rolebinding.yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: 0.0.1-rabbit-endpoint-reader
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.19.2
+    release: "0.0.1"
+    heritage: "Helm"
+subjects:
+- kind: ServiceAccount
+  name: 0.0.1-rabbit
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: 0.0.1-rabbit-endpoint-reader
+---
+# Source: rasa-x/charts/postgresql/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: 0.0.1-postgresql-headless
+  labels:
+    app: postgresql
+    chart: postgresql-8.6.13
+    release: "0.0.1"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app: postgresql
+    release: "0.0.1"
+---
+# Source: rasa-x/charts/postgresql/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: 0.0.1-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-8.6.13
+    release: "0.0.1"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app: postgresql
+    release: "0.0.1"
+    role: master
+---
+# Source: rasa-x/charts/rabbitmq/templates/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: 0.0.1-rabbit-headless
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.19.2
+    release: "0.0.1"
+    heritage: "Helm"
+spec:
+  clusterIP: None
+  ports:
+  - name: epmd
+    port: 4369
+    targetPort: epmd
+  - name: amqp
+    port: 5672
+    targetPort: amqp
+  - name: dist
+    port: 25672
+    targetPort: dist
+  - name: stats
+    port: 15672
+    targetPort: stats
+  selector:
+    app: rabbitmq
+    release: "0.0.1"
+---
+# Source: rasa-x/charts/rabbitmq/templates/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: 0.0.1-rabbit
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.19.2
+    release: "0.0.1"
+    heritage: "Helm"
+spec:
+  type: ClusterIP
+  ports:
+  - name: epmd
+    port: 4369
+    targetPort: epmd
+    nodePort: null
+  - name: amqp
+    port: 5672
+    targetPort: amqp
+    nodePort: null
+  - name: dist
+    port: 25672
+    targetPort: dist
+    nodePort: null
+  - name: stats
+    port: 15672
+    targetPort: stats
+    nodePort: null
+  selector:
+    app: rabbitmq
+    release: "0.0.1"
+---
+# Source: rasa-x/charts/redis/templates/headless-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: 0.0.1-redis-headless
+  labels:
+    app: redis
+    chart: redis-10.5.14
+    release: 0.0.1
+    heritage: Helm
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app: redis
+    release: 0.0.1
+---
+# Source: rasa-x/charts/redis/templates/redis-master-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: 0.0.1-redis-master
+  labels:
+    app: redis
+    chart: redis-10.5.14
+    release: 0.0.1
+    heritage: Helm
+spec:
+  type: ClusterIP
+  ports:
+  - name: redis
+    port: 6379
+    targetPort: redis
+  selector:
+    app: redis
+    release: 0.0.1
+    role: master
+---
+# Source: rasa-x/templates/app-service.yaml
+apiVersion: "v1"
+kind: "Service"
+metadata:
+  name: 0.0.1-rasa-x-app
+  labels:
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: app
+spec:
+  ports:
+  - port: 5055
+    targetPort: 5055
+    protocol: "TCP"
+    name: "http"
+    # workaround for nginx which curls on port 80 to check availability
+  - port: 80
+    targetPort: 80
+    protocol: "TCP"
+    name: "workaround"
+  selector:
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/component: app
+---
+# Source: rasa-x/templates/db-migration-service.yaml
+apiVersion: "v1"
+kind: "Service"
+metadata:
+  name: 0.0.1-rasa-x-db-migration-service-headless
+  labels:
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: db-migration-service
+spec:
+  clusterIP: "None"
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: "TCP"
+    name: "http"
+  selector:
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/component: db-migration-service
+---
+# Source: rasa-x/templates/duckling-service.yaml
+apiVersion: "v1"
+kind: "Service"
+metadata:
+  name: 0.0.1-rasa-x-duckling
+  labels:
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: duckling
+spec:
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: "TCP"
+  selector:
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/component: duckling
+---
+# Source: rasa-x/templates/nginx-service.yaml
+apiVersion: "v1"
+kind: "Service"
+metadata:
+  name: 0.0.1-rasa-x-nginx
+  labels:
+    
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: nginx
+spec:
+  ports:
+  - port: 8000
+    targetPort: 8080
+    protocol: "TCP"
+    name: "http"
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/component: nginx
+---
+# Source: rasa-x/templates/rasa-services.yaml
+apiVersion: "v1"
+kind: "Service"
+metadata:
+  name: 0.0.1-rasa-x-rasa-production
+  labels:
+    
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: rasa-production
+spec:
+  ports:
+  - port: 5005
+    targetPort: 5005
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/component: rasa-production
+
+# this is needed to make it clear that these are two resources
+---
+# Source: rasa-x/templates/rasa-services.yaml
+apiVersion: "v1"
+kind: "Service"
+metadata:
+  name: 0.0.1-rasa-x-rasa-worker
+  labels:
+    
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: rasa-worker
+spec:
+  ports:
+  - port: 5005
+    targetPort: 5005
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/component: rasa-worker
+
+# this is needed to make it clear that these are two resources
+---
+# Source: rasa-x/templates/rasa-x-service.yaml
+apiVersion: "v1"
+kind: "Service"
+metadata:
+  name: 0.0.1-rasa-x-rasa-x
+  labels:
+    
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: rasa-x
+spec:
+  ports:
+  - port: 5002
+    targetPort: http
+    protocol: "TCP"
+    name: "http"
+  selector:
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/component: rasa-x
+---
+# Source: rasa-x/templates/app-deployment.yaml
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: 0.0.1-app
+  labels:
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: app
+  annotations:
+    sidecar.jaegertracing.io/inject: "false"
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rasa-x
+      app.kubernetes.io/instance: 0.0.1
+      app.kubernetes.io/component: app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rasa-x
+        app.kubernetes.io/instance: 0.0.1
+        app.kubernetes.io/component: app
+    spec:
+      automountServiceAccountToken: true
+      
+      
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: rasa-x
+        image: "rasa/rasa-x-demo:0.38.1"
+        imagePullPolicy: Always
+        ports:
+        - name: "http"
+          containerPort: 5055
+          protocol: "TCP"
+        livenessProbe:
+          initialDelaySeconds: 10
+          httpGet:
+            path: "/health"
+            port: "http"
+            scheme: HTTP
+        readinessProbe:
+          initialDelaySeconds: 10
+          httpGet:
+            path: "/health"
+            port: "http"
+            scheme: HTTP
+        env:
+          []
+---
+# Source: rasa-x/templates/duckling-deployment.yaml
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: 0.0.1-duckling
+  labels:
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: duckling
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rasa-x
+      app.kubernetes.io/instance: 0.0.1
+      app.kubernetes.io/component: duckling
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rasa-x
+        app.kubernetes.io/instance: 0.0.1
+        app.kubernetes.io/component: duckling
+    spec:
+      automountServiceAccountToken: false
+      
+      
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: rasa-x
+        image: "rasa/duckling:0.1.6.3"
+        imagePullPolicy: Always
+        ports:
+        - name: "http"
+          containerPort: 8000
+          protocol: "TCP"
+        livenessProbe:
+          httpGet:
+            path: "/"
+            port: "http"
+            scheme: HTTP
+          initialDelaySeconds: 10
+
+        readinessProbe:
+          httpGet:
+            path: "/"
+            port: "http"
+            scheme: HTTP
+          initialDelaySeconds: 10
+---
+# Source: rasa-x/templates/event-service-deployment.yaml
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: 0.0.1-event-service
+  labels:
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: event-service
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rasa-x
+      app.kubernetes.io/instance: 0.0.1
+      app.kubernetes.io/component: event-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rasa-x
+        app.kubernetes.io/instance: 0.0.1
+        app.kubernetes.io/component: event-service
+    spec:
+      automountServiceAccountToken: false
+      
+      
+      securityContext:
+        fsGroup: 1000
+      # Use the init-db init container to check if database migration is completed.
+      # The event service uses a database, to make sure that the database is ready
+      # to use we use the database migration service to check migration status.
+      
+      initContainers:
+      - name: init-db
+        image: alpine:3.12.3
+        command:
+        - 'sh'
+        - '-c'
+        - "apk update --no-cache && \
+          apk add jq curl && \
+          until nslookup 0.0.1-rasa-x-db-migration-service-headless 1> /dev/null; do echo Waiting for the database migration service; sleep 2; done && \
+          until [[ \"$(curl -s http://0.0.1-rasa-x-db-migration-service-headless:8000 | jq -r .status)\" == \"completed\" ]]; do \
+          STATUS_JSON=$(curl -s http://0.0.1-rasa-x-db-migration-service-headless:8000); \
+          PROGRESS_IN_PERCENT=$(echo $STATUS_JSON | jq -r .progress_in_percent); \
+          STATUS=$(echo $STATUS_JSON | jq -r .status); \
+          echo The database migration status: ${STATUS}...${PROGRESS_IN_PERCENT}%; \
+          sleep 5; \
+          done; \
+          echo The database migration status: completed...100%"
+
+      containers:
+      - name: rasa-x
+        image: "rasa/rasa-x:0.38.1"
+        imagePullPolicy: Always
+        args:
+          - python
+          - -m
+          - rasax.community.services.event_service
+        ports:
+          - name: "http"
+            containerPort: 5673
+            protocol: "TCP"
+        livenessProbe:
+          initialDelaySeconds: 10
+          httpGet:
+            path: "/health"
+            port: "http"
+            scheme: HTTP
+        readinessProbe:
+          initialDelaySeconds: 10
+          httpGet:
+            path: "/health"
+            port: "http"
+            scheme: HTTP
+        env:
+        - name: "SELF_PORT"
+          value: "5673"
+        - name: "RABBITMQ_QUEUE"
+          value: "rasa_production_events"
+        - name: "RABBITMQ_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "0.0.1-rabbit"
+              key: "rabbitmq-password"
+        
+        - name: "REDIS_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "0.0.1-redis"
+              key: "redis-password"
+        - name: "RASA_X_USER_ANALYTICS"
+          value: "0"
+        - name: "LOCAL_MODE" # This variable doesn't do anything anymore in Rasa X 0.28 and later
+          value: "false"
+        - name: "DB_USER"
+          value: "postgres"
+        - name: "DB_HOST"
+          value: "0.0.1-postgresql"
+        - name: "DB_PORT"
+          value: "5432"
+        - name: "DB_DATABASE"
+          value: "rasa"
+        - name: "DB_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "0.0.1-postgresql"
+              key: postgresql-password
+        
+        volumeMounts:
+        - mountPath: "/app/endpoints.yml"
+          subPath: "endpoints.yml"
+          name: "rasa-configuration"
+      volumes:
+      - name: "rasa-configuration"
+        configMap:
+          name: "0.0.1-rasa-configuration-files"
+          items:
+            - key: "rasa-endpoints"
+              path: "endpoints.yml"
+---
+# Source: rasa-x/templates/nginx-deployment.yaml
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: 0.0.1-nginx
+  labels:
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: nginx
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rasa-x
+      app.kubernetes.io/instance: 0.0.1
+      app.kubernetes.io/component: nginx
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rasa-x
+        app.kubernetes.io/instance: 0.0.1
+        app.kubernetes.io/component: nginx
+    spec:
+      automountServiceAccountToken: false
+      
+      
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: rasa-x
+        image: "rasa/nginx:0.38.1"
+        imagePullPolicy: Always
+        ports:
+        - name: "http"
+          containerPort: 8080
+          protocol: "TCP"
+        livenessProbe:
+          exec:
+            command:
+              - curl
+              - localhost:8080/nginx_status
+          initialDelaySeconds: 10
+          failureThreshold: 10
+        readinessProbe:
+          exec:
+            command:
+              - curl
+              - localhost:8080/nginx_status
+          initialDelaySeconds: 10
+        env:
+        - name: "RASA_X_HOST"
+          value: "0.0.1-rasa-x-rasa-x.rasa-chat-bot.svc:5002"
+        - name: "RASA_PRODUCTION_HOST"
+          value: "0.0.1-rasa-x-rasa-production.rasa-chat-bot.svc:5005"
+        - name: "CUSTOM_ACTION_HOST"
+          value: "0.0.1-rasa-x-app.rasa-chat-bot.svc:5055"
+        volumeMounts:
+        - mountPath: "/opt/bitnami/nginx/conf/bitnami/terms"
+          name: "agreement"
+        
+      volumes:
+      - configMap:
+          items:
+          - key: "agree"
+            path: "agree.txt"
+          name: "0.0.1-agreement"
+        name: "agreement"
+---
+# Source: rasa-x/templates/rasa-deployments.yaml
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: "0.0.1-rasa-production"
+  labels:
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: rasa-production
+  annotations:
+    sidecar.jaegertracing.io/inject: "false"
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rasa-x
+      app.kubernetes.io/instance: 0.0.1
+      app.kubernetes.io/component: rasa-production
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rasa-x
+        app.kubernetes.io/instance: 0.0.1
+        app.kubernetes.io/component: rasa-production
+      annotations:
+        checksum/rasa-config: 675b14f8959f00c080f5bebd442723195fb0f4aa46e64553f26120df62150a55
+        checksum/rasa-secret: 34e61552dc59b87da5495faa9f55ee2e1ac9f4b15b056230ed69f4b774dd290d
+    spec:
+      automountServiceAccountToken: false
+      
+      
+      securityContext:
+        fsGroup: 1000
+      # Use the init-db init container to check if database migration is completed.
+      # The rasa service depends on the rasa x server, to make sure that the database is ready
+      # and the rasa x server is fully operational we use the database migration service
+      # to check migration status.
+      
+      initContainers:
+      - name: init-db
+        image: alpine:3.12.3
+        command:
+        - 'sh'
+        - '-c'
+        - "apk update --no-cache && \
+          apk add jq curl && \
+          until nslookup 0.0.1-rasa-x-db-migration-service-headless 1> /dev/null; do echo Waiting for the database migration service; sleep 2; done && \
+          until [[ \"$(curl -s http://0.0.1-rasa-x-db-migration-service-headless:8000 | jq -r .status)\" == \"completed\" ]]; do \
+          STATUS_JSON=$(curl -s http://0.0.1-rasa-x-db-migration-service-headless:8000); \
+          PROGRESS_IN_PERCENT=$(echo $STATUS_JSON | jq -r .progress_in_percent); \
+          STATUS=$(echo $STATUS_JSON | jq -r .status); \
+          echo The database migration status: ${STATUS}...${PROGRESS_IN_PERCENT}%; \
+          sleep 5; \
+          done; \
+          echo The database migration status: completed...100%"
+      containers:
+      - name: rasa-x
+        image: 'rasa/rasa:2.4.0-full'
+        imagePullPolicy: Always
+        ports:
+        - name: "http"
+          containerPort: 5005
+          protocol: "TCP"
+        livenessProbe:
+          httpGet:
+            path: "/"
+            port: "http"
+            scheme: HTTP
+          initialDelaySeconds: 10
+          failureThreshold: 10
+        args:
+        - x
+        - --no-prompt
+        - --production
+        - --config-endpoint
+        - http://0.0.1-rasa-x-rasa-x.rasa-chat-bot.svc:5002/api/config?token=$(RASA_X_TOKEN)
+        - --port
+        - "5005"
+        - --jwt-method
+        - HS256
+        - --jwt-secret
+        - "$(JWT_SECRET)"
+        - --auth-token
+        - "$(RASA_TOKEN)"
+        - --cors
+        - '*'
+        
+        env:
+        - name: "MPLCONFIGDIR"
+          value: "/tmp/.matplotlib"
+        - name: "DB_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "0.0.1-postgresql"
+              key: postgresql-password
+        - name: "DB_DATABASE"
+          value: tracker
+        - name: "RASA_X_TOKEN"
+          valueFrom:
+            secretKeyRef:
+              name: 0.0.1-rasa
+              key: "rasaXToken"
+        - name: "RASA_TOKEN"
+          valueFrom:
+            secretKeyRef:
+              name: 0.0.1-rasa
+              key: "rasaToken"
+        - name: "JWT_SECRET"
+          valueFrom:
+            secretKeyRef:
+              name: 0.0.1-rasa
+              key: "jwtSecret"
+        - name: "REDIS_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "0.0.1-redis"
+              key: "redis-password"
+        - name: "RABBITMQ_QUEUE"
+          value: "rasa_production_events"
+        - name: "RABBITMQ_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "0.0.1-rabbit"
+              key: "rabbitmq-password"
+        - name: "RABBITMQ_QUEUE"
+          value: "rasa_production_events"
+        - name: "RASA_ENVIRONMENT"
+          value: "production"
+        - name: "RASA_MODEL_SERVER"
+          value: http://0.0.1-rasa-x-rasa-x.rasa-chat-bot.svc:5002/api/projects/default/models/tags/production
+        - name: "RASA_DUCKLING_HTTP_URL"
+          value: http://0.0.1-rasa-x-duckling.rasa-chat-bot.svc:8000
+        
+        volumeMounts:
+        # Mount the temporary directory for the Rasa global configuration
+        - name: config-dir
+          mountPath: /.config
+
+      volumes:
+      - name: config-dir
+        emptyDir: {}
+
+# this is needed to make it clear that these are two resources
+---
+# Source: rasa-x/templates/rasa-deployments.yaml
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: "0.0.1-rasa-worker"
+  labels:
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: rasa-worker
+  annotations:
+    sidecar.jaegertracing.io/inject: "false"
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rasa-x
+      app.kubernetes.io/instance: 0.0.1
+      app.kubernetes.io/component: rasa-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rasa-x
+        app.kubernetes.io/instance: 0.0.1
+        app.kubernetes.io/component: rasa-worker
+      annotations:
+        checksum/rasa-config: 675b14f8959f00c080f5bebd442723195fb0f4aa46e64553f26120df62150a55
+        checksum/rasa-secret: 34e61552dc59b87da5495faa9f55ee2e1ac9f4b15b056230ed69f4b774dd290d
+    spec:
+      automountServiceAccountToken: false
+      
+      
+      securityContext:
+        fsGroup: 1000
+      # Use the init-db init container to check if database migration is completed.
+      # The rasa service depends on the rasa x server, to make sure that the database is ready
+      # and the rasa x server is fully operational we use the database migration service
+      # to check migration status.
+      
+      initContainers:
+      - name: init-db
+        image: alpine:3.12.3
+        command:
+        - 'sh'
+        - '-c'
+        - "apk update --no-cache && \
+          apk add jq curl && \
+          until nslookup 0.0.1-rasa-x-db-migration-service-headless 1> /dev/null; do echo Waiting for the database migration service; sleep 2; done && \
+          until [[ \"$(curl -s http://0.0.1-rasa-x-db-migration-service-headless:8000 | jq -r .status)\" == \"completed\" ]]; do \
+          STATUS_JSON=$(curl -s http://0.0.1-rasa-x-db-migration-service-headless:8000); \
+          PROGRESS_IN_PERCENT=$(echo $STATUS_JSON | jq -r .progress_in_percent); \
+          STATUS=$(echo $STATUS_JSON | jq -r .status); \
+          echo The database migration status: ${STATUS}...${PROGRESS_IN_PERCENT}%; \
+          sleep 5; \
+          done; \
+          echo The database migration status: completed...100%"
+      containers:
+      - name: rasa-x
+        image: 'rasa/rasa:2.4.0-full'
+        imagePullPolicy: Always
+        ports:
+        - name: "http"
+          containerPort: 5005
+          protocol: "TCP"
+        livenessProbe:
+          httpGet:
+            path: "/"
+            port: "http"
+            scheme: HTTP
+          initialDelaySeconds: 10
+          failureThreshold: 10
+        args:
+        - x
+        - --no-prompt
+        - --production
+        - --config-endpoint
+        - http://0.0.1-rasa-x-rasa-x.rasa-chat-bot.svc:5002/api/config?token=$(RASA_X_TOKEN)
+        - --port
+        - "5005"
+        - --jwt-method
+        - HS256
+        - --jwt-secret
+        - "$(JWT_SECRET)"
+        - --auth-token
+        - "$(RASA_TOKEN)"
+        - --cors
+        - '*'
+        
+        env:
+        - name: "MPLCONFIGDIR"
+          value: "/tmp/.matplotlib"
+        - name: "DB_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "0.0.1-postgresql"
+              key: postgresql-password
+        - name: "DB_DATABASE"
+          value: worker_tracker
+        - name: "RASA_X_TOKEN"
+          valueFrom:
+            secretKeyRef:
+              name: 0.0.1-rasa
+              key: "rasaXToken"
+        - name: "RASA_TOKEN"
+          valueFrom:
+            secretKeyRef:
+              name: 0.0.1-rasa
+              key: "rasaToken"
+        - name: "JWT_SECRET"
+          valueFrom:
+            secretKeyRef:
+              name: 0.0.1-rasa
+              key: "jwtSecret"
+        - name: "REDIS_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "0.0.1-redis"
+              key: "redis-password"
+        - name: "RABBITMQ_QUEUE"
+          value: "rasa_production_events"
+        - name: "RABBITMQ_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "0.0.1-rabbit"
+              key: "rabbitmq-password"
+        - name: "RABBITMQ_QUEUE"
+          value: "rasa_production_events"
+        - name: "RASA_ENVIRONMENT"
+          value: "worker"
+        - name: "RASA_MODEL_SERVER"
+          value: http://0.0.1-rasa-x-rasa-x.rasa-chat-bot.svc:5002/api/projects/default/models/tags/production
+        - name: "RASA_DUCKLING_HTTP_URL"
+          value: http://0.0.1-rasa-x-duckling.rasa-chat-bot.svc:8000
+        
+        volumeMounts:
+        # Mount the temporary directory for the Rasa global configuration
+        - name: config-dir
+          mountPath: /.config
+
+      volumes:
+      - name: config-dir
+        emptyDir: {}
+
+# this is needed to make it clear that these are two resources
+---
+# Source: rasa-x/templates/rasa-x-deployment.yaml
+apiVersion: "apps/v1"
+kind: "Deployment"
+metadata:
+  name: 0.0.1-rasa-x
+  labels:
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: rasa-x
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rasa-x
+      app.kubernetes.io/instance: 0.0.1
+      app.kubernetes.io/component: rasa-x
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rasa-x
+        app.kubernetes.io/instance: 0.0.1
+        app.kubernetes.io/component: rasa-x
+      annotations:
+        checksum/rasa-config: 675b14f8959f00c080f5bebd442723195fb0f4aa46e64553f26120df62150a55
+        checksum/rasa-x-config: 897126ecd528aadb8655c16514dd5f02055ee2d0ddc7d69b4eab6ad494c79b3e
+        checksum/rasa-secret: 34e61552dc59b87da5495faa9f55ee2e1ac9f4b15b056230ed69f4b774dd290d
+    spec:
+      automountServiceAccountToken: false
+      
+      
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: rasa-x
+        image: "rasa/rasa-x:0.38.1"
+        imagePullPolicy: Always
+        ports:
+          - name: "http"
+            containerPort: 5002
+            protocol: "TCP"
+        livenessProbe:
+          httpGet:
+            path: "/"
+            port: "http"
+            scheme: HTTP
+          initialDelaySeconds: 10
+          failureThreshold: 10
+        readinessProbe:
+          httpGet:
+            path: "/"
+            port: "http"
+            scheme: HTTP
+          initialDelaySeconds: 10
+          failureThreshold: 10
+        env:
+        - name: "SELF_PORT"
+          value: "5002"
+        - name: "LOCAL_MODE" # This variable doesn't do anything anymore in Rasa X 0.28 and later
+          value: "false"
+        - name: "RASA_X_HOST"
+          value: http://0.0.1-rasa-x-rasa-x.rasa-chat-bot.svc:5002
+        - name: "RASA_MODEL_DIR"
+          value: "/app/models"
+        - name: "RUN_EVENT_CONSUMER_AS_SEPARATE_SERVICE"
+          value: "true"
+        - name: "RABBITMQ_QUEUE"
+          value: "rasa_production_events"
+        - name: "RABBITMQ_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "0.0.1-rabbit"
+              key: "rabbitmq-password"
+        - name: "REDIS_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "0.0.1-redis"
+              key: "redis-password"
+        - name: "PASSWORD_SALT"
+          valueFrom:
+            secretKeyRef:
+              name: 0.0.1-rasa
+              key: "passwordSalt"
+        - name: "RASA_X_USER_ANALYTICS"
+          value: "0"
+        - name: "SANIC_RESPONSE_TIMEOUT"
+          value: "3600"
+        - name: "JWT_SECRET"
+          valueFrom:
+            secretKeyRef:
+              name: 0.0.1-rasa
+              key: "jwtSecret"
+        - name: "RASA_TOKEN"
+          valueFrom:
+            secretKeyRef:
+              name: 0.0.1-rasa
+              key: "rasaToken"
+        - name: "RASA_X_TOKEN"
+          valueFrom:
+            secretKeyRef:
+              name: 0.0.1-rasa
+              key: "rasaXToken"
+        - name: "RASA_X_USERNAME"
+          value: "me"
+        - name: "RASA_X_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: 0.0.1-rasa
+              key: "initialPassword"
+        - name: "RUN_DATABASE_MIGRATION_AS_SEPARATE_SERVICE"
+          value: "true"
+        - name: "DB_USER"
+          value: "postgres"
+        - name: "DB_HOST"
+          value: "0.0.1-postgresql"
+        - name: "DB_PORT"
+          value: "5432"
+        - name: "DB_DATABASE"
+          value: "rasa"
+        - name: "DB_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "0.0.1-postgresql"
+              key: postgresql-password
+        
+        volumeMounts:
+        - mountPath: "/app/environments.yml"
+          subPath: "environments.yml"
+          name: "environments"
+        - mountPath: "/app/endpoints.yml"
+          subPath: "endpoints.yml"
+          name: "rasa-configuration"
+        - mountPath: "/app/credentials.yml"
+          subPath: "credentials.yml"
+          name: "rasa-configuration"
+        - mountPath: "/app/models"
+          name: "rasa-x-claim"
+          subPath: "models"
+        - mountPath: "/app/logs"
+          name: "rasa-x-claim"
+          subPath: "logs"
+        - mountPath: "/app/auth"
+          name: "rasa-x-claim"
+          subPath: "auth"
+        - mountPath: "/app/git"
+          name: "rasa-x-claim"
+          subPath: "git"
+      volumes:
+      - name: "environments"
+        configMap:
+          name: "0.0.1-rasa-x-configuration-files"
+          items:
+          - key: "environments"
+            path: "environments.yml"
+      - name: "rasa-configuration"
+        configMap:
+          name: "0.0.1-rasa-configuration-files"
+          items:
+          - key: "rasa-endpoints"
+            path: "endpoints.yml"
+          - key: "rasa-credentials"
+            path: "credentials.yml"
+      - name: "rasa-x-claim"
+        persistentVolumeClaim:
+          claimName: 0.0.1-rasa-x-claim
+---
+# Source: rasa-x/charts/postgresql/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: 0.0.1-postgresql
+  labels:
+    app: postgresql
+    chart: postgresql-8.6.13
+    release: "0.0.1"
+    heritage: "Helm"
+spec:
+  serviceName: 0.0.1-postgresql-headless
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: postgresql
+      release: "0.0.1"
+      role: master
+  template:
+    metadata:
+      name: 0.0.1-postgresql
+      labels:
+        app: postgresql
+        chart: postgresql-8.6.13
+        release: "0.0.1"
+        heritage: "Helm"
+        role: master
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      containers:
+        - name: 0.0.1-postgresql
+          image: docker.io/bitnami/postgresql:11.7.0-debian-10-r55
+          imagePullPolicy: "IfNotPresent"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: 0.0.1-postgresql
+                  key: postgresql-password
+            - name: POSTGRES_DB
+              value: "rasa"
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "postgres" -d "rasa" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+                - |
+                  exec pg_isready -U "postgres" -d "rasa" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 6
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+              subPath: 
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: rasa-x/charts/rabbitmq/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: 0.0.1-rabbit
+  labels:
+    app: rabbitmq
+    chart: rabbitmq-6.19.2
+    release: "0.0.1"
+    heritage: "Helm"
+spec:
+  serviceName: 0.0.1-rabbit-headless
+  podManagementPolicy: OrderedReady
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: rabbitmq
+      release: "0.0.1"
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+        release: "0.0.1"
+        chart: rabbitmq-6.19.2
+      annotations:
+        checksum/secret: 4782b9740c473fca46701ae87f995cd70c2e43ff04d2504a8b157d0d279c3f9e
+    spec:      
+      serviceAccountName: 0.0.1-rabbit
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: rabbitmq
+        image: docker.io/bitnami/rabbitmq:3.8.3-debian-10-r11
+        imagePullPolicy: "IfNotPresent"
+        command:
+         - bash
+         - -ec
+         - |
+            mkdir -p /opt/bitnami/rabbitmq/.rabbitmq/
+            mkdir -p /opt/bitnami/rabbitmq/etc/rabbitmq/
+            touch /opt/bitnami/rabbitmq/var/lib/rabbitmq/.start
+            #persist the erlang cookie in both places for server and cli tools
+            echo $RABBITMQ_ERL_COOKIE > /opt/bitnami/rabbitmq/var/lib/rabbitmq/.erlang.cookie
+            cp /opt/bitnami/rabbitmq/var/lib/rabbitmq/.erlang.cookie /opt/bitnami/rabbitmq/.rabbitmq/
+            #change permission so only the user has access to the cookie file
+            chmod 600 /opt/bitnami/rabbitmq/.rabbitmq/.erlang.cookie /opt/bitnami/rabbitmq/var/lib/rabbitmq/.erlang.cookie
+            #copy the mounted configuration to both places
+            cp  /opt/bitnami/rabbitmq/conf/* /opt/bitnami/rabbitmq/etc/rabbitmq
+            # Apply resources limits
+            ulimit -n "${RABBITMQ_ULIMIT_NOFILES}"
+            #replace the default password that is generated
+            sed -i "/CHANGEME/cdefault_pass=${RABBITMQ_PASSWORD//\\/\\\\}" /opt/bitnami/rabbitmq/etc/rabbitmq/rabbitmq.conf
+            exec rabbitmq-server
+        volumeMounts:
+          - name: config-volume
+            mountPath: /opt/bitnami/rabbitmq/conf
+          - name: healthchecks
+            mountPath: /usr/local/sbin/rabbitmq-api-check
+            subPath: rabbitmq-api-check
+          - name: healthchecks
+            mountPath: /usr/local/sbin/rabbitmq-health-check
+            subPath: rabbitmq-health-check
+          - name: data
+            mountPath: "/opt/bitnami/rabbitmq/var/lib/rabbitmq"
+        ports:
+        - name: epmd
+          containerPort: 4369
+        - name: amqp
+          containerPort: 5672
+        - name: dist
+          containerPort: 25672
+        - name: stats
+          containerPort: 15672
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - rabbitmq-api-check "http://user:$RABBITMQ_PASSWORD@127.0.0.1:15672/api/healthchecks/node" '{"status":"ok"}'
+          initialDelaySeconds: 120
+          timeoutSeconds: 20
+          periodSeconds: 30
+          failureThreshold: 6
+          successThreshold: 1
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - rabbitmq-health-check "http://user:$RABBITMQ_PASSWORD@127.0.0.1:15672/api/healthchecks/node" '{"status":"ok"}'
+          initialDelaySeconds: 10
+          timeoutSeconds: 20
+          periodSeconds: 30
+          failureThreshold: 3
+          successThreshold: 1
+        env:
+          - name: BITNAMI_DEBUG
+            value: "false"
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: K8S_SERVICE_NAME
+            value: "0.0.1-rabbit-headless"
+          - name: K8S_ADDRESS_TYPE
+            value: hostname
+          - name: RABBITMQ_NODENAME
+            value: "rabbit@$(MY_POD_NAME).$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+          - name: K8S_HOSTNAME_SUFFIX
+            value: ".$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+          - name: RABBITMQ_LOGS
+            value: "-"
+          - name: RABBITMQ_ULIMIT_NOFILES
+            value: "65536"
+          - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
+            value: +S 2:1
+          - name: RABBITMQ_USE_LONGNAME
+            value: "true"
+          - name: RABBITMQ_ERL_COOKIE
+            valueFrom:
+              secretKeyRef:
+                name: 0.0.1-rabbit
+                key: rabbitmq-erlang-cookie
+          - name: RABBITMQ_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: 0.0.1-rabbit
+                key: rabbitmq-password
+      securityContext:
+        fsGroup: 1001
+        runAsUser: 1001
+      volumes:
+        - name: config-volume
+          configMap:
+            name: 0.0.1-rabbit-config
+            items:
+            - key: rabbitmq.conf
+              path: rabbitmq.conf
+            - key: enabled_plugins
+              path: enabled_plugins
+        - name: healthchecks
+          configMap:
+            name: 0.0.1-rabbit-healthchecks
+            items:
+            - key: rabbitmq-health-check
+              path: rabbitmq-health-check
+              mode: 111
+            - key: rabbitmq-api-check
+              path: rabbitmq-api-check
+              mode: 111
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: rabbitmq
+          release: "0.0.1"
+          heritage: "Helm"
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+            requests:
+              storage: "8Gi"
+---
+# Source: rasa-x/charts/redis/templates/redis-master-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: 0.0.1-redis-master
+  labels:
+    app: redis
+    chart: redis-10.5.14
+    release: 0.0.1
+    heritage: Helm
+spec:
+  selector:
+    matchLabels:
+      app: redis
+      release: 0.0.1
+      role: master
+  serviceName: 0.0.1-redis-headless
+  template:
+    metadata:
+      labels:
+        app: redis
+        chart: redis-10.5.14
+        release: 0.0.1
+        role: master
+      annotations:
+        checksum/health: 2f5728fdbd88efe97d02aeb40ab1c1b558d9529470fccc6d040a4b369b257aff
+        checksum/configmap: ed0e31ad5ec89c18230ba1f49e09e944157ce99225748641c1a14a2197eb7755
+        checksum/secret: 6984bccea0c3fe8ab5fe3dac8f28b4377d25f7e07f17ef311cdd8606ae6e84ca
+    spec:      
+      securityContext:
+        fsGroup: 1001
+      serviceAccountName: "default"
+      containers:
+      - name: 0.0.1-redis
+        image: "docker.io/bitnami/redis:5.0.8-debian-10-r16"
+        imagePullPolicy: "IfNotPresent"
+        securityContext:
+          runAsUser: 1001
+        command:
+        - /bin/bash
+        - -c
+        - |
+          if [[ -n $REDIS_PASSWORD_FILE ]]; then
+            password_aux=`cat ${REDIS_PASSWORD_FILE}`
+            export REDIS_PASSWORD=$password_aux
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/master.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf
+          fi
+          if [[ ! -f /opt/bitnami/redis/etc/redis.conf ]];then
+            cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf
+          fi
+          ARGS=("--port" "${REDIS_PORT}")
+          ARGS+=("--requirepass" "${REDIS_PASSWORD}")
+          ARGS+=("--masterauth" "${REDIS_PASSWORD}")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/redis.conf")
+          ARGS+=("--include" "/opt/bitnami/redis/etc/master.conf")
+          /run.sh ${ARGS[@]}
+        env:
+        - name: REDIS_REPLICATION_MODE
+          value: master
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: 0.0.1-redis
+              key: redis-password
+        - name: REDIS_PORT
+          value: "6379"
+        ports:
+        - name: redis
+          containerPort: 6379
+        livenessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_liveness_local.sh 5
+        readinessProbe:
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 1
+          successThreshold: 1
+          failureThreshold: 5
+          exec:
+            command:
+            - sh
+            - -c
+            - /health/ping_readiness_local.sh 5
+        resources:
+          null
+        volumeMounts:
+        - name: health
+          mountPath: /health
+        - name: redis-data
+          mountPath: /data
+          subPath: 
+        - name: config
+          mountPath: /opt/bitnami/redis/mounted-etc
+        - name: redis-tmp-conf
+          mountPath: /opt/bitnami/redis/etc/
+      volumes:
+      - name: health
+        configMap:
+          name: 0.0.1-redis-health
+          defaultMode: 0755
+      - name: config
+        configMap:
+          name: 0.0.1-redis
+      - name: redis-tmp-conf
+        emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+        labels:
+          app: redis
+          release: 0.0.1
+          heritage: Helm
+          component: master
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+        
+        selector:
+  updateStrategy:
+    type: RollingUpdate
+---
+# Source: rasa-x/templates/db-migration-service-deployment.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: 0.0.1-db-migration-service
+  labels:
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: db-migration-service
+spec:
+  serviceName: "default"
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rasa-x
+      app.kubernetes.io/instance: 0.0.1
+      app.kubernetes.io/component: db-migration-service
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rasa-x
+        app.kubernetes.io/instance: 0.0.1
+        app.kubernetes.io/component: db-migration-service
+    spec:
+      automountServiceAccountToken: false
+      
+      
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: db-migration-service
+        image: "rasa/rasa-x:0.38.1"
+        imagePullPolicy: Always
+        args:
+          - python
+          - -m
+          - rasax.community.services.db_migration_service
+        ports:
+          - name: "http"
+            containerPort: 8000
+            protocol: "TCP"
+        livenessProbe:
+          initialDelaySeconds: 10
+          httpGet:
+            path: "/health"
+            port: "http"
+            scheme: HTTP
+        readinessProbe:
+          initialDelaySeconds: 10
+          httpGet:
+            path: "/health"
+            port: "http"
+            scheme: HTTP
+        env:
+        - name: "RASA_TELEMETRY_ENABLED"
+          value: "false"
+        - name: "SELF_PORT"
+          value: "8000"
+        - name: "RUN_DATABASE_MIGRATION_AS_SEPARATE_SERVICE"
+          value: "true"
+        - name: "DB_USER"
+          value: "postgres"
+        - name: "DB_HOST"
+          value: "0.0.1-postgresql"
+        - name: "DB_PORT"
+          value: "5432"
+        - name: "DB_DATABASE"
+          value: "rasa"
+        - name: "DB_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "0.0.1-postgresql"
+              key: postgresql-password
+---
+# Source: rasa-x/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: 0.0.1-rasa-x
+  labels:
+    helm.sh/chart: rasa-x-1.8.5
+    app.kubernetes.io/name: rasa-x
+    app.kubernetes.io/instance: 0.0.1
+    app.kubernetes.io/version: "0.38.1"
+    app.kubernetes.io/managed-by: Helm
+spec:
+  rules:
+    - host: "rasa-x.example.com"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: 0.0.1-rasa-x-nginx
+                port:
+                  number: 8000
