@@ -25,7 +25,7 @@ jobs:
           # github.sha - The commit SHA that triggered the workflow run
           docker_image_tag: ${{ github.sha }}
 
-      - name: "Upgrade a Rasa X deployment"
+        - name: Upgrade a Rasa X deployment
           run: |
             helm upgrade --install --reuse-values \
               --set app.name=${{ steps.action_server.outputs.docker_image_name }} \
