@@ -17,4 +17,4 @@ USER root
 COPY ./actions /app/actions
 
 # By best practices, don't run the code with root user
-USER 1001g
+USER 1001
